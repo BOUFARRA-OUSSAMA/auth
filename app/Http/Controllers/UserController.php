@@ -2,77 +2,73 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
+use App\Application\Services\UserService;
+use App\Http\Traits\ApiResponseTrait;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Tymon\JWTAuth\Facades\JWTAuth;
-use Tymon\JWTAuth\Exceptions\JWTException;
+use Illuminate\Support\Facades\Validator;
 
 class UserController extends Controller
 {
+    use ApiResponseTrait;
+
+    private UserService $userService;
+
+    public function __construct(UserService $userService)
+    {
+        $this->userService = $userService;
+    }
+
     public function register(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255',
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        // Check if email already exists
-        if (User::where('email', $request->email)->exists()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Email already exists',
-                'errors' => ['email' => ['The email has already been taken.']]
-            ], 422);
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation error', 422, $validator->errors());
         }
 
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
+        try {
+            $result = $this->userService->register(
+                $request->name,
+                $request->email,
+                $request->password,
+                $request->phone ?? null
+            );
 
-        return response()->json([
-            'status' => true,
-            'message' => 'User registered successfully',
-            'user' => $user
-        ], 201);
+            return $this->successResponse($result['user'], $result['message'], 201);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            return $this->errorResponse('Registration failed: ' . $e->getMessage(), 500);
+        }
     }
-
 
     public function login(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'email' => 'required|string|email',
             'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Invalid credentials',
-                'errors' => ['email' => ['The provided credentials do not match our records.']]
-            ], 401);
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation error', 422, $validator->errors());
         }
 
         try {
-            // Generate JWT token
-            $token = JWTAuth::fromUser($user);
+            $result = $this->userService->login($request->email, $request->password);
 
-            return response()->json([
-                'status' => true,
-                'message' => 'User logged in successfully',
-                'token' => $token
+            return $this->successResponse([
+                'token' => $result['token'],
+                'status' => $result['status'],
+                'message' => $result['message']
             ]);
-        } catch (JWTException $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Could not create token',
-                'error' => $e->getMessage()
-            ], 500);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 401);
+        } catch (\Exception $e) {
+            return $this->errorResponse('Login failed: ' . $e->getMessage(), 500);
         }
     }
 }
