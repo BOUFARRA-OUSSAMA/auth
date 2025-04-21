@@ -34,35 +34,55 @@ return [
     'attribute_types' => [
         'string' => [
             'validation' => 'string|max:255',
-            'cast' => 'string',
+            'cast'       => 'string',
         ],
         'text' => [
             'validation' => 'string',
-            'cast' => 'string',
+            'cast'       => 'string',
+        ],
+        'textarea' => [
+            'validation' => 'string',
+            'cast'       => 'string',
         ],
         'integer' => [
             'validation' => 'integer',
-            'cast' => 'integer',
+            'cast'       => 'integer',
         ],
         'decimal' => [
             'validation' => 'numeric',
-            'cast' => 'float',
+            'cast'       => 'float',
         ],
         'boolean' => [
             'validation' => 'boolean',
-            'cast' => 'boolean',
+            'cast'       => 'boolean',
         ],
         'date' => [
             'validation' => 'date',
-            'cast' => 'date',
+            'cast'       => 'date',
         ],
         'datetime' => [
             'validation' => 'date',
-            'cast' => 'datetime',
+            'cast'       => 'datetime',
         ],
         'json' => [
             'validation' => 'json',
-            'cast' => 'array',
+            'cast'       => 'array',
+        ],
+        'select' => [
+            'validation' => 'string',
+            'cast'       => 'string',
+        ],
+        'multiselect' => [
+            'validation' => 'array',
+            'cast'       => 'array',
+        ],
+        'file' => [
+            'validation' => 'file',
+            'cast'       => 'string',
+        ],
+        'image' => [
+            'validation' => 'image',
+            'cast'       => 'string',
         ],
         // Add more types as needed
     ],

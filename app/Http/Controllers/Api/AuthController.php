@@ -21,7 +21,8 @@ class AuthController extends Controller
     {
         $this->authService = $authService;
         $this->userService = $userService;
-        $this->middleware('auth:api', ['except' => ['login', 'register', 'refresh']]);
+        // Change from auth:api to jwt.auth
+        $this->middleware('jwt.auth', ['except' => ['login', 'register', 'refresh']]);
     }
 
     /**
@@ -124,7 +125,7 @@ class AuthController extends Controller
             if (!$user) {
                 return $this->errorResponse('User not found', 404);
             }
-
+            
             $userDTO = $this->userService->getUserById($user->id);
             return $this->successResponse($userDTO);
         } catch (\Exception $e) {

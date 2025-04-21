@@ -3,17 +3,19 @@
 namespace App\Providers;
 
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Auth\RequestGuard;
+use Illuminate\Http\Request;
 
 class AuthServiceProvider extends ServiceProvider
 {
     /**
-     * The policy mappings for the application.
+     * The model to policy mappings for the application.
      *
      * @var array<class-string, class-string>
      */
     protected $policies = [
-        // 'App\Models\Model' => 'App\Policies\ModelPolicy',
+        //
     ];
 
     /**
@@ -23,6 +25,8 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        // You can define your gates here
+        // Configure auth middleware to throw an exception for API routes
+        // instead of redirecting to the login page
+        $this->app['config']->set('auth.guards.api.driver', 'jwt');
     }
 }
