@@ -3,7 +3,7 @@
 namespace App\Infrastructure\Repositories;
 
 use App\Domain\Entities\AttributeValue as AttributeValueEntity;
-use App\Domain\Interfaces\Repositories\AttributeValueRepositoryInterface;
+use app\Domain\Interfaces\Repositories\AttributeValueRepositoryInterface;
 use App\Infrastructure\Persistence\Models\AttributeValue as AttributeValueModel;
 
 class EloquentAttributeValueRepository implements AttributeValueRepositoryInterface
