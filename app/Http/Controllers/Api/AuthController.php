@@ -125,9 +125,17 @@ class AuthController extends Controller
             if (!$user) {
                 return $this->errorResponse('User not found', 404);
             }
-            
-            $userDTO = $this->userService->getUserById($user->id);
-            return $this->successResponse($userDTO);
+
+            // Create a DTO directly without using the service
+            $userDTO = new \App\Application\DTOs\UserDTO(
+                $user->name,
+                $user->email,
+                $user->phone ?? null,
+                $user->status ?? 'active',
+                $user->id
+            );
+
+            return $this->successResponse($userDTO->toArray());
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 401);
         }

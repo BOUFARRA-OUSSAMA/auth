@@ -26,21 +26,25 @@ class UserService
      * @param int $id
      * @return UserDTO|null
      */
-    public function getUserById(int $id): ?UserDTO
+    public function getUserById(int $id): ?array
     {
-        $user = $this->userRepository->findById($id);
+        $userModel = UserModel::find($id);
 
-        if (!$user) {
+        if (!$userModel) {
             return null;
         }
 
-        return new UserDTO(
-            $user->getName(),
-            $user->getEmail(),
-            $user->getPhone(),
-            $user->getStatus()->getValue(),
-            $user->getId()
+        // Create a DTO from the user model
+        $userDTO = new UserDTO(
+            $userModel->name,
+            $userModel->email,
+            $userModel->phone ?? null,
+            $userModel->status ?? 'active', // Set a default if status doesn't exist
+            $userModel->id
         );
+
+        // Return the DTO as array
+        return $userDTO->toArray();
     }
 
     /**
