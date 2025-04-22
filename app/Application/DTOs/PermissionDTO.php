@@ -2,26 +2,26 @@
 
 namespace App\Application\DTOs;
 
-class RoleDTO
+class PermissionDTO
 {
     private string $name;
     private string $code;
     private ?string $description;
+    private ?string $group;
     private ?int $id;
-    private array $permissions = [];
 
     public function __construct(
         string $name,
         string $code,
         ?string $description = null,
-        ?int $id = null,
-        array $permissions = []
+        ?string $group = null,
+        ?int $id = null
     ) {
         $this->name = $name;
         $this->code = $code;
         $this->description = $description;
+        $this->group = $group;
         $this->id = $id;
-        $this->permissions = $permissions;
     }
 
     public function getName(): string
@@ -39,48 +39,30 @@ class RoleDTO
         return $this->description;
     }
 
+    public function getGroup(): ?string
+    {
+        return $this->group;
+    }
+
     public function getId(): ?int
     {
         return $this->id;
     }
 
     /**
-     * Get permissions
-     * 
-     * @return array
-     */
-    public function getPermissions(): array
-    {
-        return $this->permissions;
-    }
-
-    /**
      * Convert to array
      *
-     * @param bool $includePermissions Whether to include permissions in the output
      * @return array
      */
-    public function toArray(bool $includePermissions = true): array
+    public function toArray(): array
     {
-        $result = [
+        return [
             'id' => $this->id,
             'name' => $this->name,
             'code' => $this->code,
             'description' => $this->description,
+            'group' => $this->group,
         ];
-
-        if ($includePermissions && !empty($this->permissions)) {
-            $result['permissions'] = array_map(function ($permission) {
-                // If it's a PermissionDTO, call its toArray method
-                if ($permission instanceof PermissionDTO) {
-                    return $permission->toArray();
-                }
-                // If it's already an array, return as is
-                return $permission;
-            }, $this->permissions);
-        }
-
-        return $result;
     }
 
     /**
@@ -95,8 +77,8 @@ class RoleDTO
             $data['name'],
             $data['code'],
             $data['description'] ?? null,
-            $data['id'] ?? null,
-            $data['permissions'] ?? []
+            $data['group'] ?? null,
+            $data['id'] ?? null
         );
     }
 }

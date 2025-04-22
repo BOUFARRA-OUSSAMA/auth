@@ -8,6 +8,7 @@ class Role
     private string $name;
     private string $code;
     private ?string $description;
+    private array $permissions = [];
 
     public function __construct(string $name, string $code, ?string $description = null)
     {
@@ -54,5 +55,54 @@ class Role
     public function setDescription(?string $description): void
     {
         $this->description = $description;
+    }
+
+    /**
+     * Get the permissions associated with this role
+     * 
+     * @return array
+     */
+    public function getPermissions(): array
+    {
+        return $this->permissions;
+    }
+
+    /**
+     * Set the permissions for this role
+     * 
+     * @param array $permissions Array of Permission entities
+     * @return void
+     */
+    public function setPermissions(array $permissions): void
+    {
+        $this->permissions = $permissions;
+    }
+
+    /**
+     * Add a permission to this role
+     * 
+     * @param Permission $permission
+     * @return void
+     */
+    public function addPermission(Permission $permission): void
+    {
+        $this->permissions[] = $permission;
+    }
+
+    /**
+     * Check if this role has a specific permission by code
+     * 
+     * @param string $permissionCode
+     * @return bool
+     */
+    public function hasPermission(string $permissionCode): bool
+    {
+        foreach ($this->permissions as $permission) {
+            if ($permission->getCode() === $permissionCode) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

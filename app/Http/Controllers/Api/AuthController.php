@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Application\Services\AuthService;
 use App\Application\Services\UserService;
+use App\Application\Services\RoleService;  // Add this line
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
@@ -16,12 +17,14 @@ class AuthController extends Controller
 
     private AuthService $authService;
     private UserService $userService;
+    private RoleService $roleService;  // Add this line
 
-    public function __construct(AuthService $authService, UserService $userService)
+    public function __construct(AuthService $authService, UserService $userService, RoleService $roleService) // Add RoleService
     {
         $this->authService = $authService;
         $this->userService = $userService;
-        // Change from auth:api to jwt.auth
+        $this->roleService = $roleService; // Add this line
+        // PRESERVED: Your original middleware declaration
         $this->middleware('jwt.auth', ['except' => ['login', 'register', 'refresh']]);
     }
 
@@ -126,7 +129,7 @@ class AuthController extends Controller
                 return $this->errorResponse('User not found', 404);
             }
 
-            // Create a DTO directly without using the service
+            // Create a DTO directly as you did before
             $userDTO = new \App\Application\DTOs\UserDTO(
                 $user->name,
                 $user->email,
@@ -135,7 +138,36 @@ class AuthController extends Controller
                 $user->id
             );
 
-            return $this->successResponse($userDTO->toArray());
+            // Get user data
+            $userData = $userDTO->toArray();
+
+            // ADD ROLES & PERMISSIONS: Enhance with role information
+            try {
+                $roles = $this->roleService->getRolesByUserId($user->id);
+                $userData['roles'] = array_map(function ($role) {
+                    return [
+                        'id' => $role->getId(),
+                        'name' => $role->getName(),
+                        'code' => $role->getCode(),
+                        'description' => $role->getDescription(),
+                        'permissions' => array_map(function ($permission) {
+                            return [
+                                'id' => $permission->getId(),
+                                'name' => $permission->getName(),
+                                'code' => $permission->getCode(),
+                                'group' => $permission->getGroup(),
+                                'description' => $permission->getDescription()
+                            ];
+                        }, $role->getPermissions())
+                    ];
+                }, $roles);
+            } catch (\Exception $e) {
+                // If roles can't be fetched, continue without them
+                // This maintains backward compatibility
+                $userData['roles'] = [];
+            }
+
+            return $this->successResponse($userData);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 401);
         }

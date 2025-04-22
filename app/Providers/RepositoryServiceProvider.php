@@ -8,11 +8,13 @@ use App\Domain\Interfaces\Repositories\RoleRepositoryInterface;
 use App\Domain\Interfaces\Repositories\EntityTypeRepositoryInterface;
 use App\Domain\Interfaces\Repositories\AttributeRepositoryInterface;
 use App\Domain\Interfaces\Repositories\AttributeValueRepositoryInterface;
+use App\Domain\Interfaces\Repositories\PermissionRepositoryInterface;
 use App\Infrastructure\Repositories\EloquentUserRepository;
 use App\Infrastructure\Repositories\EloquentRoleRepository;
 use App\Infrastructure\Repositories\EloquentEntityTypeRepository;
 use App\Infrastructure\Repositories\EloquentAttributeRepository;
 use App\Infrastructure\Repositories\EloquentAttributeValueRepository;
+use App\Infrastructure\Repositories\EloquentPermissionRepository;
 
 class RepositoryServiceProvider extends ServiceProvider
 {
@@ -26,6 +28,7 @@ class RepositoryServiceProvider extends ServiceProvider
         $this->app->bind(EntityTypeRepositoryInterface::class, EloquentEntityTypeRepository::class);
         $this->app->bind(AttributeRepositoryInterface::class, EloquentAttributeRepository::class);
         $this->app->bind(AttributeValueRepositoryInterface::class, EloquentAttributeValueRepository::class);
+        $this->app->bind(PermissionRepositoryInterface::class, EloquentPermissionRepository::class);
     }
 
     /**

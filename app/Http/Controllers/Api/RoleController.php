@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Application\DTOs\RoleDTO;
 use App\Application\Services\RoleService;
+use App\Application\Services\PermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Traits\ApiResponseTrait;
@@ -14,10 +15,12 @@ class RoleController extends Controller
     use ApiResponseTrait;
 
     private RoleService $roleService;
+    private PermissionService $permissionService;
 
-    public function __construct(RoleService $roleService)
+    public function __construct(RoleService $roleService, PermissionService $permissionService)
     {
         $this->roleService = $roleService;
+        $this->permissionService = $permissionService;
     }
 
     /**
@@ -43,6 +46,8 @@ class RoleController extends Controller
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:50|unique:roles',
             'description' => 'nullable|string',
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'exists:permissions,id',
         ]);
 
         if ($validator->fails()) {
@@ -90,6 +95,8 @@ class RoleController extends Controller
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:50|unique:roles,code,' . $id,
             'description' => 'nullable|string',
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'exists:permissions,id',
         ]);
 
         if ($validator->fails()) {
@@ -137,6 +144,56 @@ class RoleController extends Controller
         try {
             $users = $this->roleService->getUsersByRole($id);
             return $this->successResponse($users);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get permissions for a role
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function permissions($id)
+    {
+        try {
+            $role = $this->roleService->getRoleById($id);
+            if (!$role) {
+                return $this->errorResponse('Role not found', 404);
+            }
+            return $this->successResponse($role->getPermissions());
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Assign permissions to a role
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function assignPermissions(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'permission_ids' => 'required|array',
+            'permission_ids.*' => 'required|exists:permissions,id',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->errorResponse('Validation error', 422, $validator->errors());
+        }
+
+        try {
+            $result = $this->roleService->assignPermissions($id, $request->permission_ids);
+            if ($result) {
+                // Get the updated role with permissions
+                $role = $this->roleService->getRoleById($id);
+                return $this->successResponse($role, 'Permissions assigned successfully');
+            }
+            return $this->errorResponse('Failed to assign permissions', 400);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }

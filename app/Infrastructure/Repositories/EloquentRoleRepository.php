@@ -2,9 +2,11 @@
 
 namespace App\Infrastructure\Repositories;
 
+use App\Domain\Entities\Permission as PermissionEntity;
 use App\Domain\Entities\Role as RoleEntity;
 use App\Domain\Interfaces\Repositories\RoleRepositoryInterface;
 use App\Infrastructure\Persistence\Models\Role as RoleModel;
+use App\Infrastructure\Persistence\Models\Permission as PermissionModel;
 
 class EloquentRoleRepository implements RoleRepositoryInterface
 {
@@ -16,7 +18,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
      */
     public function findById(int $id): ?RoleEntity
     {
-        $model = RoleModel::find($id);
+        $model = RoleModel::with('permissions')->find($id);
 
         if (!$model) {
             return null;
@@ -33,7 +35,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
      */
     public function findByCode(string $code): ?RoleEntity
     {
-        $model = RoleModel::where('code', $code)->first();
+        $model = RoleModel::with('permissions')->where('code', $code)->first();
 
         if (!$model) {
             return null;
@@ -50,7 +52,7 @@ class EloquentRoleRepository implements RoleRepositoryInterface
      */
     public function findByCriteria(array $criteria): array
     {
-        $query = RoleModel::query();
+        $query = RoleModel::with('permissions');
 
         if (isset($criteria['name'])) {
             $query->where('name', 'like', '%' . $criteria['name'] . '%');
@@ -114,6 +116,43 @@ class EloquentRoleRepository implements RoleRepositoryInterface
     }
 
     /**
+     * Assign permissions to role
+     *
+     * @param int $roleId
+     * @param array $permissionIds
+     * @return bool
+     */
+    public function assignPermissions(int $roleId, array $permissionIds): bool
+    {
+        $role = RoleModel::find($roleId);
+
+        if (!$role) {
+            return false;
+        }
+
+        $role->permissions()->sync($permissionIds);
+
+        return true;
+    }
+
+    /**
+     * Find roles by user ID
+     *
+     * @param int $userId
+     * @return array
+     */
+    public function findByUserId(int $userId): array
+    {
+        $models = RoleModel::with('permissions')->whereHas('users', function ($query) use ($userId) {
+            $query->where('users.id', $userId);
+        })->get();
+
+        return $models->map(function ($model) {
+            return $this->mapModelToEntity($model);
+        })->all();
+    }
+
+    /**
      * Map Eloquent model to domain entity
      *
      * @param RoleModel $model
@@ -128,6 +167,22 @@ class EloquentRoleRepository implements RoleRepositoryInterface
         );
 
         $role->setId($model->id);
+
+        // Map permissions if they are loaded
+        if ($model->relationLoaded('permissions')) {
+            $permissions = [];
+            foreach ($model->permissions as $permissionModel) {
+                $permission = new PermissionEntity(
+                    $permissionModel->name,
+                    $permissionModel->code,
+                    $permissionModel->description,
+                    $permissionModel->group
+                );
+                $permission->setId($permissionModel->id);
+                $permissions[] = $permission;
+            }
+            $role->setPermissions($permissions);
+        }
 
         return $role;
     }

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\EntityTypeController;
 use App\Http\Controllers\Api\AttributeController;
 use App\Http\Controllers\Api\AttributeValueController;
+use App\Http\Controllers\Api\PermissionController;  // Add this line
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 // Health check
@@ -16,43 +17,52 @@ Route::get('test', fn() => response()->json(['message' => 'API is working']));
 // Public auth endpoints
 Route::prefix('auth')->group(function () {
     Route::post('register', [AuthController::class, 'register'])->name('auth.register');
-    Route::post('login',    [AuthController::class, 'login'])->    name('auth.login');
+    Route::post('login',    [AuthController::class, 'login'])->name('auth.login');
 });
 
 // Protected JWT endpoints
 Route::middleware('jwt.auth')->group(function () {
     // Auth
     Route::prefix('auth')->group(function () {
-        Route::get('me',       [AuthController::class, 'me'])->      name('auth.me');
-        Route::post('refresh', [AuthController::class, 'refresh'])-> name('auth.refresh');
-        Route::post('logout',  [AuthController::class, 'logout'])->  name('auth.logout');
+        Route::get('me',       [AuthController::class, 'me'])->name('auth.me');
+        Route::post('refresh', [AuthController::class, 'refresh'])->name('auth.refresh');
+        Route::post('logout',  [AuthController::class, 'logout'])->name('auth.logout');
     });
 
     // User & Role resources
     Route::apiResource('users', ApiUserController::class);
     Route::apiResource('roles', RoleController::class);
-    Route::get('users/{user}/roles', [ApiUserController::class, 'roles'])-> name('users.roles');
-    Route::get('roles/{role}/users', [RoleController::class,      'users'])-> name('roles.users');
+    Route::get('users/{user}/roles', [ApiUserController::class, 'roles'])->name('users.roles');
+    Route::post('users/{user}/roles', [ApiUserController::class, 'assignRoles'])->name('users.assign-roles');
+    Route::get('roles/{role}/users', [RoleController::class, 'users'])->name('roles.users');
+
+    // NEW: Permission resources
+    Route::apiResource('permissions', PermissionController::class);
+    Route::get('permissions/groups', [PermissionController::class, 'groups'])->name('permissions.groups');
+    Route::get('permissions/group/{group}', [PermissionController::class, 'byGroup'])->name('permissions.by-group');
+    Route::get('roles/{role}/permissions', [RoleController::class, 'permissions'])->name('roles.permissions');
+    Route::post('roles/{role}/permissions', [RoleController::class, 'assignPermissions'])->name('roles.assign-permissions');
+    Route::get('permissions/role/{role}', [PermissionController::class, 'byRole'])->name('permissions.by-role');
 
     // EAV system
     Route::apiResource('entity-types',    EntityTypeController::class);
     Route::apiResource('attributes',      AttributeController::class);
-    Route::apiResource('attribute-values',AttributeValueController::class);
+    Route::apiResource('attribute-values', AttributeValueController::class);
 
     // EAV relationships & batch
     Route::get('entity-types/{entityType}/attributes', [EntityTypeController::class, 'attributes'])
-         ->name('entity-types.attributes');
+        ->name('entity-types.attributes');
     Route::get('attributes/{attribute}/values', [AttributeController::class, 'values'])
-         ->name('attributes.values');
-    Route::post('attribute-values/batch', [AttributeValueController::class,'batchUpdate'])
-         ->name('attribute-values.batch-update');
+        ->name('attributes.values');
+    Route::post('attribute-values/batch', [AttributeValueController::class, 'batchUpdate'])
+        ->name('attribute-values.batch-update');
 });
 
 // 404 fallback
 Route::fallback(fn() => response()->json(['error' => 'Not Found'], 404))
-     ->name('api.fallback');
+    ->name('api.fallback');
 
-
+// Debug endpoint
 Route::get('token/debug', function (Request $request) {
     try {
         $token = JWTAuth::getToken();

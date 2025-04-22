@@ -45,4 +45,21 @@ interface RoleRepositoryInterface
      * @return bool
      */
     public function delete(Role $role): bool;
+
+    /**
+     * Assign permissions to role
+     *
+     * @param int $roleId
+     * @param array $permissionIds
+     * @return bool
+     */
+    public function assignPermissions(int $roleId, array $permissionIds): bool;
+
+    /**
+     * Find roles by user ID
+     *
+     * @param int $userId
+     * @return array
+     */
+    public function findByUserId(int $userId): array;
 }

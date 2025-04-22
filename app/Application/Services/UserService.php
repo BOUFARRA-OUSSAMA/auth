@@ -376,4 +376,121 @@ class UserService
             ];
         })->toArray();
     }
+
+
+    /**
+     * Get a user by ID with roles
+     *
+     * @param int $id
+     * @return array|null
+     */
+    public function getUserWithRoles(int $id): ?array
+    {
+        $userModel = UserModel::with('roles')->find($id);
+
+        if (!$userModel) {
+            return null;
+        }
+
+        // Create a DTO from the user model
+        $userDTO = new UserDTO(
+            $userModel->name,
+            $userModel->email,
+            $userModel->phone ?? null,
+            $userModel->status ?? 'active',
+            $userModel->id
+        );
+
+        // Get basic user data
+        $userData = $userDTO->toArray();
+
+        // Add roles data
+        $userData['roles'] = $userModel->roles->map(function ($role) {
+            $roleData = [
+                'id' => $role->id,
+                'name' => $role->name,
+                'code' => $role->code,
+                'description' => $role->description
+            ];
+
+            // Add permissions if they're loaded
+            if ($role->relationLoaded('permissions')) {
+                $roleData['permissions'] = $role->permissions->map(function ($permission) {
+                    return [
+                        'id' => $permission->id,
+                        'name' => $permission->name,
+                        'code' => $permission->code,
+                        'description' => $permission->description,
+                        'group' => $permission->group
+                    ];
+                })->toArray();
+            }
+
+            return $roleData;
+        })->toArray();
+
+        return $userData;
+    }
+
+    /**
+     * Get users with roles and pagination
+     * 
+     * @param array $filters
+     * @param int $page
+     * @param int $perPage
+     * @return array
+     */
+    public function getUsersWithRoles(array $filters = [], int $page = 1, int $perPage = 15): array
+    {
+        // Start with a query builder
+        $query = UserModel::with('roles');
+
+        // Apply filters
+        if (isset($filters['name'])) {
+            $query->where('name', 'like', '%' . $filters['name'] . '%');
+        }
+
+        if (isset($filters['email'])) {
+            $query->where('email', 'like', '%' . $filters['email'] . '%');
+        }
+
+        if (isset($filters['status'])) {
+            $query->where('status', $filters['status']);
+        }
+
+        // Paginate results
+        $paginator = $query->paginate($perPage, ['*'], 'page', $page);
+
+        // Format results
+        $items = $paginator->items();
+        $mappedItems = [];
+
+        foreach ($items as $userModel) {
+            $userData = [
+                'id' => $userModel->id,
+                'name' => $userModel->name,
+                'email' => $userModel->email,
+                'phone' => $userModel->phone,
+                'status' => $userModel->status,
+                'roles' => $userModel->roles->map(function ($role) {
+                    return [
+                        'id' => $role->id,
+                        'name' => $role->name,
+                        'code' => $role->code,
+                        'description' => $role->description
+                    ];
+                })->toArray()
+            ];
+
+            $mappedItems[] = $userData;
+        }
+
+        return [
+            'items' => $mappedItems,
+            'total' => $paginator->total(),
+            'current_page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'last_page' => $paginator->lastPage(),
+        ];
+    }
 }
