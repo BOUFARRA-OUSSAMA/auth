@@ -5,11 +5,12 @@ namespace App\Infrastructure\Repositories;
 use App\Domain\Entities\Permission as PermissionEntity;
 use App\Domain\Interfaces\Repositories\PermissionRepositoryInterface;
 use App\Infrastructure\Persistence\Models\Permission as PermissionModel;
+use Illuminate\Support\Facades\DB;
 
 class EloquentPermissionRepository implements PermissionRepositoryInterface
 {
     /**
-     * Find permission by ID
+     * Find a permission by ID
      *
      * @param int $id
      * @return PermissionEntity|null
@@ -26,7 +27,7 @@ class EloquentPermissionRepository implements PermissionRepositoryInterface
     }
 
     /**
-     * Find permission by code
+     * Find a permission by code
      *
      * @param string $code
      * @return PermissionEntity|null
@@ -43,32 +44,111 @@ class EloquentPermissionRepository implements PermissionRepositoryInterface
     }
 
     /**
+     * Save a permission (create or update)
+     *
+     * @param PermissionEntity $permission
+     * @return PermissionEntity
+     */
+    public function save(PermissionEntity $permission): PermissionEntity
+    {
+        if ($permission->getId()) {
+            // Update
+            $model = PermissionModel::find($permission->getId());
+            if (!$model) {
+                throw new \RuntimeException('Permission not found');
+            }
+        } else {
+            // Create
+            $model = new PermissionModel();
+        }
+
+        $model->name = $permission->getName();
+        $model->code = $permission->getCode();
+        $model->description = $permission->getDescription();
+        $model->group = $permission->getGroup();
+
+        $model->save();
+
+        // Set the ID if it was a creation
+        if (!$permission->getId()) {
+            $permission = new PermissionEntity(
+                $permission->getName(),
+                $permission->getCode(),
+                $permission->getDescription(),
+                $permission->getGroup(),
+                $model->id
+            );
+        }
+
+        return $permission;
+    }
+
+    /**
+     * Delete a permission
+     *
+     * @param PermissionEntity $permission
+     * @return bool
+     */
+    public function delete(PermissionEntity $permission): bool
+    {
+        $model = PermissionModel::find($permission->getId());
+
+        if (!$model) {
+            return false;
+        }
+
+        return (bool) $model->delete();
+    }
+
+    /**
      * Find permissions by criteria
      *
      * @param array $criteria
+     * @param int $page
+     * @param int $perPage
      * @return array
      */
-    public function findByCriteria(array $criteria): array
+    public function findByCriteria(array $criteria, int $page = 1, int $perPage = 15): array
     {
         $query = PermissionModel::query();
 
-        if (isset($criteria['name'])) {
+        // Apply filters
+        if (!empty($criteria['name'])) {
             $query->where('name', 'like', '%' . $criteria['name'] . '%');
         }
 
-        if (isset($criteria['code'])) {
-            $query->where('code', $criteria['code']);
+        if (!empty($criteria['code'])) {
+            $query->where('code', 'like', '%' . $criteria['code'] . '%');
         }
 
-        if (isset($criteria['group'])) {
+        if (!empty($criteria['group'])) {
             $query->where('group', $criteria['group']);
         }
 
-        $models = $query->get();
+        // Get total count
+        $total = $query->count();
 
-        return $models->map(function ($model) {
+        // Apply pagination
+        $items = $query->orderBy('id', 'asc')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get();
+
+        // Calculate last page
+        $lastPage = ceil($total / $perPage);
+
+        // Map models to entities
+        $entities = $items->map(function ($model) {
             return $this->mapModelToEntity($model);
         })->all();
+
+        return [
+            'items' => $entities,
+            'total' => $total,
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'last_page' => $lastPage
+        ];
     }
 
     /**
@@ -83,7 +163,7 @@ class EloquentPermissionRepository implements PermissionRepositoryInterface
 
         return $models->map(function ($model) {
             return $this->mapModelToEntity($model);
-        })->all();
+        })->toArray();
     }
 
     /**
@@ -100,68 +180,22 @@ class EloquentPermissionRepository implements PermissionRepositoryInterface
 
         return $models->map(function ($model) {
             return $this->mapModelToEntity($model);
-        })->all();
+        })->toArray();
     }
 
     /**
-     * Save permission
-     *
-     * @param PermissionEntity $permission
-     * @return PermissionEntity
-     */
-    public function save(PermissionEntity $permission): PermissionEntity
-    {
-        $data = [
-            'name' => $permission->getName(),
-            'code' => $permission->getCode(),
-            'description' => $permission->getDescription(),
-            'group' => $permission->getGroup(),
-        ];
-
-        if ($permission->getId()) {
-            $model = PermissionModel::findOrFail($permission->getId());
-            $model->update($data);
-        } else {
-            $model = PermissionModel::create($data);
-        }
-
-        $permissionEntity = $this->mapModelToEntity($model);
-
-        return $permissionEntity;
-    }
-
-    /**
-     * Delete permission
-     *
-     * @param PermissionEntity $permission
-     * @return bool
-     */
-    public function delete(PermissionEntity $permission): bool
-    {
-        if (!$permission->getId()) {
-            return false;
-        }
-
-        $model = PermissionModel::find($permission->getId());
-        if (!$model) {
-            return false;
-        }
-
-        return (bool) $model->delete();
-    }
-
-    /**
-     * Get all permissions
+     * Get all permission groups
      *
      * @return array
      */
-    public function findAll(): array
+    public function findGroups(): array
     {
-        $models = PermissionModel::all();
-
-        return $models->map(function ($model) {
-            return $this->mapModelToEntity($model);
-        })->all();
+        return PermissionModel::select('group')
+            ->distinct()
+            ->whereNotNull('group')
+            ->orderBy('group')
+            ->pluck('group')
+            ->toArray();
     }
 
     /**
@@ -172,15 +206,12 @@ class EloquentPermissionRepository implements PermissionRepositoryInterface
      */
     private function mapModelToEntity(PermissionModel $model): PermissionEntity
     {
-        $permission = new PermissionEntity(
+        return new PermissionEntity(
             $model->name,
             $model->code,
             $model->description,
-            $model->group
+            $model->group,
+            $model->id
         );
-
-        $permission->setId($model->id);
-
-        return $permission;
     }
 }

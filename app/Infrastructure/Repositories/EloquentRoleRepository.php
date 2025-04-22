@@ -45,12 +45,14 @@ class EloquentRoleRepository implements RoleRepositoryInterface
     }
 
     /**
-     * Find roles by criteria
+     * Find roles by criteria with pagination
      *
      * @param array $criteria
+     * @param int $page
+     * @param int $perPage
      * @return array
      */
-    public function findByCriteria(array $criteria): array
+    public function findByCriteria(array $criteria = [], int $page = 1, int $perPage = 15): array
     {
         $query = RoleModel::with('permissions');
 
@@ -62,11 +64,31 @@ class EloquentRoleRepository implements RoleRepositoryInterface
             $query->where('code', $criteria['code']);
         }
 
-        $models = $query->get();
+        // Get total count before pagination
+        $total = $query->count();
 
-        return $models->map(function ($model) {
+        // Apply pagination
+        $models = $query->orderBy('id', 'asc')
+            ->offset(($page - 1) * $perPage)
+            ->limit($perPage)
+            ->get();
+
+        // Calculate last page
+        $lastPage = ceil($total / $perPage);
+
+        // Map models to entities
+        $entities = $models->map(function ($model) {
             return $this->mapModelToEntity($model);
         })->all();
+
+        // Return with pagination structure
+        return [
+            'items' => $entities,
+            'total' => $total,
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'last_page' => $lastPage
+        ];
     }
 
     /**

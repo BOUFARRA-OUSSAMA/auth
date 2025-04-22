@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Application\DTOs\RoleDTO;
 use App\Application\Services\RoleService;
-use App\Application\Services\PermissionService;
+use App\Application\Services\UserService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Http\Traits\ApiResponseTrait;
@@ -15,23 +15,53 @@ class RoleController extends Controller
     use ApiResponseTrait;
 
     private RoleService $roleService;
-    private PermissionService $permissionService;
+    private UserService $userService;
 
-    public function __construct(RoleService $roleService, PermissionService $permissionService)
+    public function __construct(RoleService $roleService, UserService $userService)
     {
         $this->roleService = $roleService;
-        $this->permissionService = $permissionService;
+        $this->userService = $userService;
     }
 
     /**
      * Display a listing of the resource.
      *
+     * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
-    public function index()
+    public function index(Request $request)
     {
-        $roles = $this->roleService->getAllRoles();
-        return $this->successResponse($roles);
+        // Get filter parameters
+        $filters = [];
+        if ($request->has('name')) {
+            $filters['name'] = $request->query('name');
+        }
+        if ($request->has('code')) {
+            $filters['code'] = $request->query('code');
+        }
+
+        // Get pagination parameters
+        $page = $request->query('page', 1);
+        $perPage = $request->query('per_page', 15);
+
+        try {
+            $roles = $this->roleService->getRoles($filters, $page, $perPage);
+
+            // Convert to array output for consistency
+            $result = [
+                'items' => array_map(function ($role) {
+                    return $role instanceof RoleDTO ? $role->toArray() : $role;
+                }, $roles['items']),
+                'total' => $roles['total'],
+                'current_page' => $roles['current_page'],
+                'per_page' => $roles['per_page'],
+                'last_page' => $roles['last_page'],
+            ];
+
+            return $this->successResponse($result);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
     }
 
     /**
@@ -44,10 +74,10 @@ class RoleController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:roles',
+            'code' => 'required|string|max:100|unique:roles,code',
             'description' => 'nullable|string',
-            'permissions' => 'nullable|array',
-            'permissions.*' => 'exists:permissions,id',
+            'permission_ids' => 'nullable|array',
+            'permission_ids.*' => 'exists:permissions,id',
         ]);
 
         if ($validator->fails()) {
@@ -55,9 +85,26 @@ class RoleController extends Controller
         }
 
         try {
-            $roleDTO = RoleDTO::fromArray($request->all());
-            $createdRole = $this->roleService->createRole($roleDTO);
-            return $this->successResponse($createdRole, 'Role created successfully', 201);
+            $roleDTO = new RoleDTO(
+                $request->name,
+                $request->code,
+                $request->description
+            );
+
+            $role = $this->roleService->createRole($roleDTO);
+
+            // Assign permissions if provided
+            if ($request->has('permission_ids') && !empty($request->permission_ids)) {
+                $this->roleService->assignPermissions($role->getId(), $request->permission_ids);
+
+                // Get updated role with permissions
+                $role = $this->roleService->getRoleWithPermissions($role->getId());
+            }
+
+            // Convert to array format
+            $result = $role instanceof RoleDTO ? $role->toArray() : $role;
+
+            return $this->successResponse($result, 'Role created successfully', 201);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -72,11 +119,18 @@ class RoleController extends Controller
     public function show($id)
     {
         try {
-            $role = $this->roleService->getRoleById($id);
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $role = $this->roleService->getRoleWithPermissions($id);
+
             if (!$role) {
                 return $this->errorResponse('Role not found', 404);
             }
-            return $this->successResponse($role);
+
+            // Convert to array format
+            $result = $role instanceof RoleDTO ? $role->toArray() : $role;
+
+            return $this->successResponse($result);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -92,11 +146,11 @@ class RoleController extends Controller
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:50|unique:roles,code,' . $id,
+            'name' => 'sometimes|required|string|max:255',
+            'code' => 'sometimes|required|string|max:100|unique:roles,code,' . $id,
             'description' => 'nullable|string',
-            'permissions' => 'nullable|array',
-            'permissions.*' => 'exists:permissions,id',
+            'permission_ids' => 'nullable|array',
+            'permission_ids.*' => 'exists:permissions,id',
         ]);
 
         if ($validator->fails()) {
@@ -104,11 +158,36 @@ class RoleController extends Controller
         }
 
         try {
-            $data = $request->all();
-            $data['id'] = $id;
-            $roleDTO = RoleDTO::fromArray($data);
-            $updatedRole = $this->roleService->updateRole($roleDTO);
-            return $this->successResponse($updatedRole, 'Role updated successfully');
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $role = $this->roleService->getRoleById($id);
+
+            if (!$role) {
+                return $this->errorResponse('Role not found', 404);
+            }
+
+            // Update properties
+            $updatedRoleDTO = new RoleDTO(
+                $request->has('name') ? $request->name : $role->getName(),
+                $request->has('code') ? $request->code : $role->getCode(),
+                $request->has('description') ? $request->description : $role->getDescription(),
+                $id
+            );
+
+            $updatedRole = $this->roleService->updateRole($updatedRoleDTO);
+
+            // Update permissions if provided
+            if ($request->has('permission_ids')) {
+                $this->roleService->assignPermissions($id, $request->permission_ids);
+            }
+
+            // Get updated role with permissions
+            $roleWithPermissions = $this->roleService->getRoleWithPermissions($id);
+
+            // Convert to array format
+            $result = $roleWithPermissions instanceof RoleDTO ? $roleWithPermissions->toArray() : $roleWithPermissions;
+
+            return $this->successResponse($result, 'Role updated successfully');
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -123,27 +202,14 @@ class RoleController extends Controller
     public function destroy($id)
     {
         try {
+            // Ensure ID is an integer
+            $id = (int)$id;
             $result = $this->roleService->deleteRole($id);
+
             if ($result) {
                 return $this->successResponse(null, 'Role deleted successfully');
             }
             return $this->errorResponse('Failed to delete role', 400);
-        } catch (\Exception $e) {
-            return $this->errorResponse($e->getMessage(), 400);
-        }
-    }
-
-    /**
-     * Get users with this role
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function users($id)
-    {
-        try {
-            $users = $this->roleService->getUsersByRole($id);
-            return $this->successResponse($users);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -158,11 +224,25 @@ class RoleController extends Controller
     public function permissions($id)
     {
         try {
-            $role = $this->roleService->getRoleById($id);
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $role = $this->roleService->getRoleWithPermissions($id);
+
             if (!$role) {
                 return $this->errorResponse('Role not found', 404);
             }
-            return $this->successResponse($role->getPermissions());
+
+            // If role is a DTO, extract permissions
+            $permissions = [];
+            if ($role instanceof RoleDTO) {
+                $permissions = array_map(function ($permission) {
+                    return $permission->toArray();
+                }, $role->getPermissions() ?? []);
+            } else if (isset($role['permissions'])) {
+                $permissions = $role['permissions'];
+            }
+
+            return $this->successResponse($permissions);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -187,13 +267,50 @@ class RoleController extends Controller
         }
 
         try {
-            $result = $this->roleService->assignPermissions($id, $request->permission_ids);
-            if ($result) {
-                // Get the updated role with permissions
-                $role = $this->roleService->getRoleById($id);
-                return $this->successResponse($role, 'Permissions assigned successfully');
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $role = $this->roleService->getRoleById($id);
+
+            if (!$role) {
+                return $this->errorResponse('Role not found', 404);
             }
+
+            $result = $this->roleService->assignPermissions($id, $request->permission_ids);
+
+            if ($result) {
+                // Get updated role with permissions
+                $updatedRole = $this->roleService->getRoleWithPermissions($id);
+
+                // Convert to array format
+                $data = $updatedRole instanceof RoleDTO ? $updatedRole->toArray() : $updatedRole;
+
+                return $this->successResponse($data, 'Permissions assigned successfully');
+            }
+
             return $this->errorResponse('Failed to assign permissions', 400);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get users for a specific role
+     *
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function users($id)
+    {
+        try {
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $users = $this->roleService->getUsersByRoleId($id);
+
+            if ($users === null) {
+                return $this->errorResponse('Role not found', 404);
+            }
+
+            return $this->successResponse($users);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }

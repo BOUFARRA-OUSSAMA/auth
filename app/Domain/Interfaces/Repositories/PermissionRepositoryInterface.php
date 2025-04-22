@@ -7,7 +7,7 @@ use App\Domain\Entities\Permission;
 interface PermissionRepositoryInterface
 {
     /**
-     * Find permission by ID
+     * Find a permission by ID
      *
      * @param int $id
      * @return Permission|null
@@ -15,7 +15,7 @@ interface PermissionRepositoryInterface
     public function findById(int $id): ?Permission;
 
     /**
-     * Find permission by code
+     * Find a permission by code
      *
      * @param string $code
      * @return Permission|null
@@ -23,12 +23,30 @@ interface PermissionRepositoryInterface
     public function findByCode(string $code): ?Permission;
 
     /**
+     * Save a permission (create or update)
+     *
+     * @param Permission $permission
+     * @return Permission
+     */
+    public function save(Permission $permission): Permission;
+
+    /**
+     * Delete a permission
+     *
+     * @param Permission $permission
+     * @return bool
+     */
+    public function delete(Permission $permission): bool;
+
+    /**
      * Find permissions by criteria
      *
      * @param array $criteria
+     * @param int $page
+     * @param int $perPage
      * @return array
      */
-    public function findByCriteria(array $criteria): array;
+    public function findByCriteria(array $criteria, int $page = 1, int $perPage = 15): array;
 
     /**
      * Find permissions by group
@@ -47,25 +65,9 @@ interface PermissionRepositoryInterface
     public function findByRoleId(int $roleId): array;
 
     /**
-     * Save permission
-     *
-     * @param Permission $permission
-     * @return Permission
-     */
-    public function save(Permission $permission): Permission;
-
-    /**
-     * Delete permission
-     *
-     * @param Permission $permission
-     * @return bool
-     */
-    public function delete(Permission $permission): bool;
-
-    /**
-     * Get all permissions
+     * Get all permission groups
      *
      * @return array
      */
-    public function findAll(): array;
+    public function findGroups(): array;
 }

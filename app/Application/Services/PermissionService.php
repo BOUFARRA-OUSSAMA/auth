@@ -5,7 +5,6 @@ namespace App\Application\Services;
 use App\Application\DTOs\PermissionDTO;
 use App\Domain\Entities\Permission;
 use App\Domain\Interfaces\Repositories\PermissionRepositoryInterface;
-use InvalidArgumentException;
 
 class PermissionService
 {
@@ -17,7 +16,7 @@ class PermissionService
     }
 
     /**
-     * Get a permission by ID
+     * Get permission by ID
      *
      * @param int $id
      * @return PermissionDTO|null
@@ -40,26 +39,35 @@ class PermissionService
     }
 
     /**
-     * Get a permission by code
-     *
-     * @param string $code
-     * @return PermissionDTO|null
+     * Get permissions with pagination and filters
+     * 
+     * @param array $filters
+     * @param int $page
+     * @param int $perPage
+     * @return array
      */
-    public function getPermissionByCode(string $code): ?PermissionDTO
+    public function findPermissions(array $filters = [], int $page = 1, int $perPage = 15): array
     {
-        $permission = $this->permissionRepository->findByCode($code);
+        $result = $this->permissionRepository->findByCriteria($filters, $page, $perPage);
 
-        if (!$permission) {
-            return null;
-        }
+        // Convert domain entities to DTOs
+        $dtos = array_map(function (Permission $permission) {
+            return new PermissionDTO(
+                $permission->getName(),
+                $permission->getCode(),
+                $permission->getDescription(),
+                $permission->getGroup(),
+                $permission->getId()
+            );
+        }, $result['items']);
 
-        return new PermissionDTO(
-            $permission->getName(),
-            $permission->getCode(),
-            $permission->getDescription(),
-            $permission->getGroup(),
-            $permission->getId()
-        );
+        return [
+            'items' => $dtos,
+            'total' => $result['total'],
+            'current_page' => $result['current_page'],
+            'per_page' => $result['per_page'],
+            'last_page' => $result['last_page'],
+        ];
     }
 
     /**
@@ -73,7 +81,7 @@ class PermissionService
         // Check if code already exists
         $existingPermission = $this->permissionRepository->findByCode($permissionDTO->getCode());
         if ($existingPermission) {
-            throw new InvalidArgumentException('Permission code already exists');
+            throw new \InvalidArgumentException('Permission code already exists');
         }
 
         // Create the permission entity
@@ -87,7 +95,7 @@ class PermissionService
         // Save the permission
         $savedPermission = $this->permissionRepository->save($permission);
 
-        // Return DTO with the generated ID
+        // Return DTO
         return new PermissionDTO(
             $savedPermission->getName(),
             $savedPermission->getCode(),
@@ -106,20 +114,20 @@ class PermissionService
     public function updatePermission(PermissionDTO $permissionDTO): PermissionDTO
     {
         if (!$permissionDTO->getId()) {
-            throw new InvalidArgumentException('Permission ID is required for update');
+            throw new \InvalidArgumentException('Permission ID is required for update');
         }
 
         // Find the permission
         $permission = $this->permissionRepository->findById($permissionDTO->getId());
         if (!$permission) {
-            throw new InvalidArgumentException('Permission not found');
+            throw new \InvalidArgumentException('Permission not found');
         }
 
         // Check if code already exists (if changed)
         if ($permission->getCode() !== $permissionDTO->getCode()) {
             $existingPermission = $this->permissionRepository->findByCode($permissionDTO->getCode());
             if ($existingPermission && $existingPermission->getId() !== $permissionDTO->getId()) {
-                throw new InvalidArgumentException('Permission code already exists');
+                throw new \InvalidArgumentException('Permission code already exists');
             }
         }
 
@@ -152,42 +160,20 @@ class PermissionService
     {
         $permission = $this->permissionRepository->findById($id);
         if (!$permission) {
-            throw new InvalidArgumentException('Permission not found');
+            throw new \InvalidArgumentException('Permission not found');
         }
 
         return $this->permissionRepository->delete($permission);
     }
 
     /**
-     * Find permissions by criteria
-     *
-     * @param array $criteria
-     * @return array
-     */
-    public function findPermissions(array $criteria = []): array
-    {
-        $permissions = $this->permissionRepository->findByCriteria($criteria);
-
-        // Convert domain entities to DTOs
-        return array_map(function (Permission $permission) {
-            return new PermissionDTO(
-                $permission->getName(),
-                $permission->getCode(),
-                $permission->getDescription(),
-                $permission->getGroup(),
-                $permission->getId()
-            );
-        }, $permissions);
-    }
-
-    /**
-     * Get all permissions
+     * Get permission groups
      *
      * @return array
      */
-    public function getAllPermissions(): array
+    public function getPermissionGroups(): array
     {
-        return $this->findPermissions();
+        return $this->permissionRepository->findGroups();
     }
 
     /**
@@ -200,7 +186,7 @@ class PermissionService
     {
         $permissions = $this->permissionRepository->findByGroup($group);
 
-        // Convert domain entities to DTOs
+        // Convert entities to DTOs
         return array_map(function (Permission $permission) {
             return new PermissionDTO(
                 $permission->getName(),
@@ -222,7 +208,7 @@ class PermissionService
     {
         $permissions = $this->permissionRepository->findByRoleId($roleId);
 
-        // Convert domain entities to DTOs
+        // Convert entities to DTOs
         return array_map(function (Permission $permission) {
             return new PermissionDTO(
                 $permission->getName(),

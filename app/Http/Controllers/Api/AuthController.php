@@ -9,6 +9,7 @@ use App\Application\Services\RoleService;  // Add this line
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\Log;
 use App\Http\Traits\ApiResponseTrait;
 
 class AuthController extends Controller
@@ -141,34 +142,53 @@ class AuthController extends Controller
             // Get user data
             $userData = $userDTO->toArray();
 
+            // Initialize roles array
+            $userData['roles'] = [];
+
             // ADD ROLES & PERMISSIONS: Enhance with role information
             try {
                 $roles = $this->roleService->getRolesByUserId($user->id);
-                $userData['roles'] = array_map(function ($role) {
-                    return [
-                        'id' => $role->getId(),
-                        'name' => $role->getName(),
-                        'code' => $role->getCode(),
-                        'description' => $role->getDescription(),
-                        'permissions' => array_map(function ($permission) {
-                            return [
-                                'id' => $permission->getId(),
-                                'name' => $permission->getName(),
-                                'code' => $permission->getCode(),
-                                'group' => $permission->getGroup(),
-                                'description' => $permission->getDescription()
-                            ];
-                        }, $role->getPermissions())
-                    ];
-                }, $roles);
+
+                // Check if roles is an array (could be empty)
+                if (is_array($roles)) {
+                    $userData['roles'] = array_map(function ($role) {
+                        $roleData = [
+                            'id' => $role->getId(),
+                            'name' => $role->getName(),
+                            'code' => $role->getCode(),
+                            'description' => $role->getDescription()
+                        ];
+
+                        // Initialize permissions array
+                        $roleData['permissions'] = [];
+
+                        // Add permissions if they exist
+                        if (method_exists($role, 'getPermissions') && is_array($role->getPermissions())) {
+                            $roleData['permissions'] = array_map(function ($permission) {
+                                return [
+                                    'id' => $permission->getId(),
+                                    'name' => $permission->getName(),
+                                    'code' => $permission->getCode(),
+                                    'group' => $permission->getGroup() ?? null,
+                                    'description' => $permission->getDescription() ?? null
+                                ];
+                            }, $role->getPermissions());
+                        }
+
+                        return $roleData;
+                    }, $roles);
+                }
             } catch (\Exception $e) {
+                // Log the specific error for debugging
+                Log::error('Error fetching roles: ' . $e->getMessage());
                 // If roles can't be fetched, continue without them
-                // This maintains backward compatibility
                 $userData['roles'] = [];
             }
 
             return $this->successResponse($userData);
         } catch (\Exception $e) {
+            // Log the specific error for debugging
+            Log::error('Auth/me error: ' . $e->getMessage());
             return $this->errorResponse($e->getMessage(), 401);
         }
     }

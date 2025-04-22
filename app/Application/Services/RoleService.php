@@ -2,13 +2,13 @@
 
 namespace App\Application\Services;
 
-use App\Application\DTOs\PermissionDTO;
 use App\Application\DTOs\RoleDTO;
-use App\Application\DTOs\UserDTO;
+use App\Application\DTOs\PermissionDTO;
 use App\Domain\Entities\Role;
 use App\Domain\Interfaces\Repositories\RoleRepositoryInterface;
 use App\Domain\Interfaces\Repositories\PermissionRepositoryInterface;
-use InvalidArgumentException;
+use App\Infrastructure\Persistence\Models\Role as RoleModel;
+use App\Infrastructure\Persistence\Models\User as UserModel;
 
 class RoleService
 {
@@ -37,24 +37,43 @@ class RoleService
             return null;
         }
 
-        // Map permissions to DTOs
-        $permissions = array_map(function ($permission) {
-            return new PermissionDTO(
-                $permission->getName(),
-                $permission->getCode(),
-                $permission->getDescription(),
-                $permission->getGroup(),
-                $permission->getId()
-            );
-        }, $role->getPermissions());
-
         return new RoleDTO(
             $role->getName(),
             $role->getCode(),
             $role->getDescription(),
-            $role->getId(),
-            $permissions
+            $role->getId()
         );
+    }
+
+    /**
+     * Get roles with pagination and filters
+     * 
+     * @param array $filters
+     * @param int $page
+     * @param int $perPage
+     * @return array
+     */
+    public function getRoles(array $filters = [], int $page = 1, int $perPage = 15): array
+    {
+        $result = $this->roleRepository->findByCriteria($filters, $page, $perPage);
+
+        // Convert domain entities to DTOs
+        $dtos = array_map(function (Role $role) {
+            return new RoleDTO(
+                $role->getName(),
+                $role->getCode(),
+                $role->getDescription(),
+                $role->getId()
+            );
+        }, $result['items']);
+
+        return [
+            'items' => $dtos,
+            'total' => $result['total'],
+            'current_page' => $result['current_page'],
+            'per_page' => $result['per_page'],
+            'last_page' => $result['last_page'],
+        ];
     }
 
     /**
@@ -68,7 +87,7 @@ class RoleService
         // Check if code already exists
         $existingRole = $this->roleRepository->findByCode($roleDTO->getCode());
         if ($existingRole) {
-            throw new InvalidArgumentException('Role code already exists');
+            throw new \InvalidArgumentException('Role code already exists');
         }
 
         // Create the role entity
@@ -81,36 +100,12 @@ class RoleService
         // Save the role
         $savedRole = $this->roleRepository->save($role);
 
-        // Assign permissions if provided
-        if (!empty($roleDTO->getPermissions())) {
-            $permissionIds = array_map(function ($permission) {
-                return is_array($permission) ? $permission['id'] : $permission;
-            }, $roleDTO->getPermissions());
-
-            $this->roleRepository->assignPermissions($savedRole->getId(), $permissionIds);
-
-            // Reload the role with permissions
-            $savedRole = $this->roleRepository->findById($savedRole->getId());
-        }
-
-        // Map permissions to DTOs
-        $permissions = array_map(function ($permission) {
-            return new PermissionDTO(
-                $permission->getName(),
-                $permission->getCode(),
-                $permission->getDescription(),
-                $permission->getGroup(),
-                $permission->getId()
-            );
-        }, $savedRole->getPermissions());
-
-        // Return DTO with the generated ID
+        // Return DTO
         return new RoleDTO(
             $savedRole->getName(),
             $savedRole->getCode(),
             $savedRole->getDescription(),
-            $savedRole->getId(),
-            $permissions
+            $savedRole->getId()
         );
     }
 
@@ -123,20 +118,20 @@ class RoleService
     public function updateRole(RoleDTO $roleDTO): RoleDTO
     {
         if (!$roleDTO->getId()) {
-            throw new InvalidArgumentException('Role ID is required for update');
+            throw new \InvalidArgumentException('Role ID is required for update');
         }
 
         // Find the role
         $role = $this->roleRepository->findById($roleDTO->getId());
         if (!$role) {
-            throw new InvalidArgumentException('Role not found');
+            throw new \InvalidArgumentException('Role not found');
         }
 
         // Check if code already exists (if changed)
         if ($role->getCode() !== $roleDTO->getCode()) {
             $existingRole = $this->roleRepository->findByCode($roleDTO->getCode());
             if ($existingRole && $existingRole->getId() !== $roleDTO->getId()) {
-                throw new InvalidArgumentException('Role code already exists');
+                throw new \InvalidArgumentException('Role code already exists');
             }
         }
 
@@ -148,36 +143,12 @@ class RoleService
         // Save the role
         $savedRole = $this->roleRepository->save($role);
 
-        // Update permissions if provided
-        if ($roleDTO->getPermissions() !== null) {
-            $permissionIds = array_map(function ($permission) {
-                return is_array($permission) ? $permission['id'] : $permission;
-            }, $roleDTO->getPermissions());
-
-            $this->roleRepository->assignPermissions($savedRole->getId(), $permissionIds);
-
-            // Reload the role with permissions
-            $savedRole = $this->roleRepository->findById($savedRole->getId());
-        }
-
-        // Map permissions to DTOs
-        $permissions = array_map(function ($permission) {
-            return new PermissionDTO(
-                $permission->getName(),
-                $permission->getCode(),
-                $permission->getDescription(),
-                $permission->getGroup(),
-                $permission->getId()
-            );
-        }, $savedRole->getPermissions());
-
         // Return updated DTO
         return new RoleDTO(
             $savedRole->getName(),
             $savedRole->getCode(),
             $savedRole->getDescription(),
-            $savedRole->getId(),
-            $permissions
+            $savedRole->getId()
         );
     }
 
@@ -191,60 +162,15 @@ class RoleService
     {
         $role = $this->roleRepository->findById($id);
         if (!$role) {
-            throw new InvalidArgumentException('Role not found');
+            throw new \InvalidArgumentException('Role not found');
         }
 
         return $this->roleRepository->delete($role);
     }
 
     /**
-     * Get all roles
+     * Assign permissions to a role
      *
-     * @return array
-     */
-    public function getAllRoles(): array
-    {
-        $roles = $this->roleRepository->findByCriteria([]);
-
-        // Convert domain entities to DTOs
-        return array_map(function ($role) {
-            // Map permissions to DTOs
-            $permissions = array_map(function ($permission) {
-                return new PermissionDTO(
-                    $permission->getName(),
-                    $permission->getCode(),
-                    $permission->getDescription(),
-                    $permission->getGroup(),
-                    $permission->getId()
-                );
-            }, $role->getPermissions());
-
-            return new RoleDTO(
-                $role->getName(),
-                $role->getCode(),
-                $role->getDescription(),
-                $role->getId(),
-                $permissions
-            );
-        }, $roles);
-    }
-
-    /**
-     * Get users by role
-     *
-     * @param int $roleId
-     * @return array
-     */
-    public function getUsersByRole(int $roleId): array
-    {
-        // This would need to be implemented in the repository
-        // For now, we can just return an empty array
-        return [];
-    }
-
-    /**
-     * Assign permissions to role
-     * 
      * @param int $roleId
      * @param array $permissionIds
      * @return bool
@@ -252,20 +178,86 @@ class RoleService
     public function assignPermissions(int $roleId, array $permissionIds): bool
     {
         // Check if role exists
-        $role = $this->roleRepository->findById($roleId);
+        $role = $this->getRoleById($roleId);
         if (!$role) {
-            throw new InvalidArgumentException('Role not found');
+            throw new \InvalidArgumentException('Role not found');
         }
 
-        // Check if all permissions exist
-        foreach ($permissionIds as $permissionId) {
-            $permission = $this->permissionRepository->findById($permissionId);
-            if (!$permission) {
-                throw new InvalidArgumentException("Permission with ID {$permissionId} not found");
-            }
+        $roleModel = RoleModel::find($roleId);
+        $roleModel->permissions()->sync($permissionIds);
+
+        return true;
+    }
+
+    /**
+     * Get a role with permissions by ID
+     *
+     * @param int $id
+     * @return array|null
+     */
+    public function getRoleWithPermissions(int $id): ?array
+    {
+        $role = $this->roleRepository->findById($id);
+        if (!$role) {
+            return null;
         }
 
-        return $this->roleRepository->assignPermissions($roleId, $permissionIds);
+        $roleDTO = new RoleDTO(
+            $role->getName(),
+            $role->getCode(),
+            $role->getDescription(),
+            $role->getId()
+        );
+
+        // Get permissions
+        $permissions = $this->permissionRepository->findByRoleId($id);
+
+        $permissionDTOs = array_map(function ($permission) {
+            return new PermissionDTO(
+                $permission->getName(),
+                $permission->getCode(),
+                $permission->getDescription(),
+                $permission->getGroup(),
+                $permission->getId()
+            );
+        }, $permissions);
+
+        $result = $roleDTO->toArray();
+        $result['permissions'] = array_map(function ($permissionDTO) {
+            return $permissionDTO->toArray();
+        }, $permissionDTOs);
+
+        return $result;
+    }
+
+    /**
+     * Get users by role ID
+     *
+     * @param int $id
+     * @return array|null
+     */
+    public function getUsersByRoleId(int $id): ?array
+    {
+        // Check if role exists
+        $role = $this->roleRepository->findById($id);
+        if (!$role) {
+            return null;
+        }
+
+        // Get users with this role
+        $users = UserModel::whereHas('roles', function ($query) use ($id) {
+            $query->where('roles.id', $id);
+        })->get();
+
+        return $users->map(function ($user) {
+            return [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'status' => $user->status,
+            ];
+        })->toArray();
     }
 
     /**
@@ -276,28 +268,24 @@ class RoleService
      */
     public function getRolesByUserId(int $userId): array
     {
-        $roles = $this->roleRepository->findByUserId($userId);
+        $roleModels = RoleModel::whereHas('users', function ($query) use ($userId) {
+            $query->where('users.id', $userId);
+        })->get();
 
-        // Convert domain entities to DTOs
-        return array_map(function ($role) {
-            // Map permissions to DTOs
-            $permissions = array_map(function ($permission) {
-                return new PermissionDTO(
-                    $permission->getName(),
-                    $permission->getCode(),
-                    $permission->getDescription(),
-                    $permission->getGroup(),
-                    $permission->getId()
-                );
-            }, $role->getPermissions());
+        return $roleModels->map(function ($model) {
+            $role = new Role(
+                $model->name,
+                $model->code,
+                $model->description,
+                $model->id
+            );
 
             return new RoleDTO(
                 $role->getName(),
                 $role->getCode(),
                 $role->getDescription(),
-                $role->getId(),
-                $permissions
+                $role->getId()
             );
-        }, $roles);
+        })->toArray();
     }
 }

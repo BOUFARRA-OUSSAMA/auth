@@ -28,37 +28,40 @@ class PermissionController extends Controller
      */
     public function index(Request $request)
     {
-        $criteria = [];
-
+        // Get filter parameters
+        $filters = [];
         if ($request->has('name')) {
-            $criteria['name'] = $request->query('name');
+            $filters['name'] = $request->query('name');
         }
-
         if ($request->has('code')) {
-            $criteria['code'] = $request->query('code');
+            $filters['code'] = $request->query('code');
         }
-
         if ($request->has('group')) {
-            $criteria['group'] = $request->query('group');
+            $filters['group'] = $request->query('group');
         }
 
-        if ($request->has('group_only') && $request->query('group_only') === 'true') {
-            // Get unique groups for grouping in the UI
-            $permissions = $this->permissionService->getAllPermissions();
-            $groups = [];
+        // Get pagination parameters
+        $page = $request->query('page', 1);
+        $perPage = $request->query('per_page', 15);
 
-            foreach ($permissions as $permission) {
-                $group = $permission->getGroup();
-                if ($group && !in_array($group, $groups)) {
-                    $groups[] = $group;
-                }
-            }
+        try {
+            $permissions = $this->permissionService->findPermissions($filters, $page, $perPage);
 
-            return $this->successResponse($groups);
+            // Convert objects to arrays for consistent output
+            $result = [
+                'items' => array_map(function ($permission) {
+                    return $permission instanceof PermissionDTO ? $permission->toArray() : $permission;
+                }, $permissions['items']),
+                'total' => $permissions['total'],
+                'current_page' => $permissions['current_page'],
+                'per_page' => $permissions['per_page'],
+                'last_page' => $permissions['last_page'],
+            ];
+
+            return $this->successResponse($result);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
         }
-
-        $permissions = $this->permissionService->findPermissions($criteria);
-        return $this->successResponse($permissions);
     }
 
     /**
@@ -71,9 +74,9 @@ class PermissionController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:permissions',
+            'code' => 'required|string|max:100|unique:permissions,code',
             'description' => 'nullable|string',
-            'group' => 'nullable|string|max:50',
+            'group' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -81,9 +84,15 @@ class PermissionController extends Controller
         }
 
         try {
-            $permissionDTO = PermissionDTO::fromArray($request->all());
-            $createdPermission = $this->permissionService->createPermission($permissionDTO);
-            return $this->successResponse($createdPermission, 'Permission created successfully', 201);
+            $permissionDTO = new PermissionDTO(
+                $request->name,
+                $request->code,
+                $request->description,
+                $request->group
+            );
+
+            $permission = $this->permissionService->createPermission($permissionDTO);
+            return $this->successResponse($permission->toArray(), 'Permission created successfully', 201);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -98,11 +107,15 @@ class PermissionController extends Controller
     public function show($id)
     {
         try {
+            // Ensure ID is an integer
+            $id = (int)$id;
             $permission = $this->permissionService->getPermissionById($id);
+
             if (!$permission) {
                 return $this->errorResponse('Permission not found', 404);
             }
-            return $this->successResponse($permission);
+
+            return $this->successResponse($permission->toArray());
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -118,10 +131,10 @@ class PermissionController extends Controller
     public function update(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:permissions,code,' . $id,
+            'name' => 'sometimes|required|string|max:255',
+            'code' => 'sometimes|required|string|max:100|unique:permissions,code,' . $id,
             'description' => 'nullable|string',
-            'group' => 'nullable|string|max:50',
+            'group' => 'nullable|string|max:100',
         ]);
 
         if ($validator->fails()) {
@@ -129,11 +142,25 @@ class PermissionController extends Controller
         }
 
         try {
-            $data = $request->all();
-            $data['id'] = $id;
-            $permissionDTO = PermissionDTO::fromArray($data);
-            $updatedPermission = $this->permissionService->updatePermission($permissionDTO);
-            return $this->successResponse($updatedPermission, 'Permission updated successfully');
+            // Ensure ID is an integer
+            $id = (int)$id;
+            $permission = $this->permissionService->getPermissionById($id);
+
+            if (!$permission) {
+                return $this->errorResponse('Permission not found', 404);
+            }
+
+            // Update properties that are present in the request
+            $updatedPermissionDTO = new PermissionDTO(
+                $request->has('name') ? $request->name : $permission->getName(),
+                $request->has('code') ? $request->code : $permission->getCode(),
+                $request->has('description') ? $request->description : $permission->getDescription(),
+                $request->has('group') ? $request->group : $permission->getGroup(),
+                $id
+            );
+
+            $updatedPermission = $this->permissionService->updatePermission($updatedPermissionDTO);
+            return $this->successResponse($updatedPermission->toArray(), 'Permission updated successfully');
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
@@ -148,7 +175,10 @@ class PermissionController extends Controller
     public function destroy($id)
     {
         try {
+            // Ensure ID is an integer
+            $id = (int)$id;
             $result = $this->permissionService->deletePermission($id);
+
             if ($result) {
                 return $this->successResponse(null, 'Permission deleted successfully');
             }
@@ -159,32 +189,61 @@ class PermissionController extends Controller
     }
 
     /**
-     * Get permissions by group.
-     *
-     * @param  string  $group
+     * Get all permission groups
+     * 
      * @return \Illuminate\Http\JsonResponse
      */
-    public function byGroup($group)
+    public function groups()
     {
         try {
-            $permissions = $this->permissionService->getPermissionsByGroup($group);
-            return $this->successResponse($permissions);
+            $groups = $this->permissionService->getPermissionGroups();
+            return $this->successResponse($groups);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
     }
 
     /**
-     * Get permissions by role ID.
-     *
-     * @param  int  $roleId
+     * Get permissions by group
+     * 
+     * @param string $group
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function byGroup($group)
+    {
+        try {
+            $permissions = $this->permissionService->getPermissionsByGroup($group);
+
+            // Convert to array output for consistency
+            $result = array_map(function ($permission) {
+                return $permission instanceof PermissionDTO ? $permission->toArray() : $permission;
+            }, $permissions);
+
+            return $this->successResponse($result);
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 400);
+        }
+    }
+
+    /**
+     * Get permissions by role ID
+     * 
+     * @param int $roleId
      * @return \Illuminate\Http\JsonResponse
      */
     public function byRole($roleId)
     {
         try {
+            // Ensure ID is an integer
+            $roleId = (int)$roleId;
             $permissions = $this->permissionService->getPermissionsByRoleId($roleId);
-            return $this->successResponse($permissions);
+
+            // Convert to array output for consistency
+            $result = array_map(function ($permission) {
+                return $permission instanceof PermissionDTO ? $permission->toArray() : $permission;
+            }, $permissions);
+
+            return $this->successResponse($result);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 400);
         }
