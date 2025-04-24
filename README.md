@@ -7,6 +7,101 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+# API Documentation
+
+## Authentication
+
+All protected endpoints require a valid JWT token in the Authorization header:
+```
+Authorization: Bearer your_token_here
+```
+
+### Public Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/test | Health check endpoint to verify if the API is working |
+| POST   | /api/auth/register | Register a new user with the system |
+| POST   | /api/auth/login | Authenticate a user and generate a JWT token |
+
+### Protected Authentication Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/auth/me | Get the currently authenticated user's information |
+| POST   | /api/auth/refresh | Refresh the user's JWT token |
+| POST   | /api/auth/logout | Invalidate the current JWT token and log out the user |
+
+## User Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/users | List all users (pagination supported) |
+| POST   | /api/users | Create a new user |
+| GET    | /api/users/{user} | Get detailed information about a specific user |
+| PUT/PATCH | /api/users/{user} | Update an existing user |
+| DELETE | /api/users/{user} | Delete a user |
+| GET    | /api/users/{user}/roles | Get all roles assigned to a specific user |
+| POST   | /api/users/{user}/roles | Assign roles to a specific user |
+
+## Role Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/roles | List all roles (pagination supported) |
+| POST   | /api/roles | Create a new role |
+| GET    | /api/roles/{role} | Get detailed information about a specific role |
+| PUT/PATCH | /api/roles/{role} | Update an existing role |
+| DELETE | /api/roles/{role} | Delete a role |
+| GET    | /api/roles/{role}/users | Get all users assigned to a specific role |
+| GET    | /api/roles/{role}/permissions | Get all permissions assigned to a specific role |
+| POST   | /api/roles/{role}/permissions | Assign permissions to a specific role |
+
+## Permission Management
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/permissions | List all permissions (pagination supported) |
+| POST   | /api/permissions | Create a new permission |
+| GET    | /api/permissions/{permission} | Get detailed information about a specific permission |
+| PUT/PATCH | /api/permissions/{permission} | Update an existing permission |
+| DELETE | /api/permissions/{permission} | Delete a permission |
+| GET    | /api/permissions/groups | Get all permission groups |
+| GET    | /api/permissions/group/{group} | Get all permissions in a specific group |
+| GET    | /api/permissions/role/{role} | Get all permissions for a specific role |
+
+## Entity-Attribute-Value (EAV) System
+
+### Entity Types
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/entity-types | List all entity types |
+| POST   | /api/entity-types | Create a new entity type |
+| GET    | /api/entity-types/{entityType} | Get detailed information about a specific entity type |
+| PUT/PATCH | /api/entity-types/{entityType} | Update an existing entity type |
+| DELETE | /api/entity-types/{entityType} | Delete an entity type |
+| GET    | /api/entity-types/{entityType}/attributes | Get all attributes for a specific entity type |
+
+### Attributes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/attributes | List all attributes |
+| POST   | /api/attributes | Create a new attribute |
+| GET    | /api/attributes/{attribute} | Get detailed information about a specific attribute |
+| PUT/PATCH | /api/attributes/{attribute} | Update an existing attribute |
+| DELETE | /api/attributes/{attribute} | Delete an attribute |
+| GET    | /api/attributes/{attribute}/values | Get all values for a specific attribute |
+
+### Attribute Values
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/attribute-values | List all attribute values |
+| POST   | /api/attribute-values | Create a new attribute value |
+| GET    | /api/attribute-values/{attributeValue} | Get detailed information about a specific attribute value |
+| PUT/PATCH | /api/attribute-values/{attributeValue} | Update an existing attribute value |
+| DELETE | /api/attribute-values/{attributeValue} | Delete an attribute value |
+| POST   | /api/attribute-values/batch | Batch update multiple attribute values at once |
+
+## Debug
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET    | /api/token/debug | Debug JWT token information, validates a token and shows payload and expiration |
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
